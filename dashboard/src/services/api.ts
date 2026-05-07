@@ -52,9 +52,10 @@ class ApiService {
         log('info', 'Status Counts Received:', data);
       });
 
-      this.socket.on('data_update', (data: any) => {
-        if (data.hasOwnProperty('weekday') && data.hasOwnProperty('slot')) {
+      this.socket.on('analytics_update', (data: AnalyticsData) => {
+        if (data.type && data.zone) {
           onAnalyticsUpdate(data);
+          log('info', 'Real-time Analytics Update Received:', data);
         }
       });
 

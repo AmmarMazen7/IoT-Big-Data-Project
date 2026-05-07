@@ -9,37 +9,55 @@ A comprehensive IoT data pipeline designed for smart city monitoring, featuring 
 The system follows a microservices-based architecture to ensure scalability and separation of concerns.
 
 ```mermaid
-graph TD
-    A[Sensor Emulator] -->|Produces Telemetry| B(Apache Kafka)
-    B -->|Consumer: Stream| C[Data Ingestion Service]
-    B -->|Consumer: Batch/Stream| D[Spark Analytics Service]
-    
-    C -->|Stores Raw Data| E[(MongoDB)]
-    D -->|Stores Aggregates| E
-    
-    E -->|Change Streams| F[Realtime Gateway]
-    B -->|Live Feed| F
-    
-    F -->|WebSockets / Socket.IO| G[React Dashboard]
-    
-    subgraph "Data Sources"
-        A
+flowchart TD
+    %% Theming and Styles
+    classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
+    classDef storage fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef compute fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
+    classDef broker fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px;
+    classDef frontend fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
+
+    %% Logical Layers
+    subgraph Produce ["1. Data Sources"]
+        SE["IoT Sensors / Emulators"]
     end
-    
-    subgraph "Messaging & Processing"
-        B
-        C
-        D
+
+    subgraph Stream ["2. Event Streaming"]
+        K["Message Broker<br/>(Apache Kafka)"]:::broker
     end
-    
-    subgraph "Storage & API"
-        E
-        F
+
+    subgraph Ingest ["3. Application Services"]
+        direction LR
+        IS["Ingestion Service"]:::compute
+        GW["API Gateway<br/>(WebSockets)"]:::compute
     end
-    
-    subgraph "Frontend"
-        G
+
+    subgraph Store ["4. Persistence Layer"]
+        MDB[("NoSQL Database<br/>(MongoDB)")]:::storage
     end
+
+    subgraph Analytics ["5. Data Processing"]
+        SP["Analytics Engine<br/>(Apache Spark)"]:::compute
+    end
+
+    subgraph Visualise ["6. User Interface"]
+        RD["Web Dashboard"]:::frontend
+    end
+
+    %% Data Flow Connections
+    SE -->|"Raw Sensor Data"| K
+    
+    K -->|"Consume Events"| IS
+    K -->|"Consume Events"| GW
+    
+    IS -->|"Persist Raw Data"| MDB
+    
+    %% Analytics Loop (Bidirectional for simplicity)
+    MDB <-->|"Batch Processing & Aggregation"| SP
+    
+    %% Frontend Updates (Dotted line for event triggers)
+    MDB -.->|"DB Change Streams"| GW
+    GW -->|"Live Data & Updates"| RD
 ```
 
 ### Data Flow Breakdown
