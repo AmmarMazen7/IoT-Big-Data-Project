@@ -1,0 +1,18 @@
+FROM python:3.10-slim-bullseye
+
+WORKDIR /app
+
+# Install Java for Spark
+RUN apt-get update && apt-get install -y openjdk-11-jre-headless wget && rm -rf /var/lib/apt/lists/*
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV PATH=$PATH:$JAVA_HOME/bin
+
+# Copy requirements.txt and install Python dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Spark application files
+COPY batch-analytics-service/iot-spark-job.py /app/spark/iot-spark-job.py
+
+# Set the entrypoint to run our python job periodically
+CMD ["/bin/bash", "-c", "while true; do python /app/spark/iot-spark-job.py; sleep 300; done"] 

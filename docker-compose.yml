@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: zookeeper:3.8
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+
+  kafka_broker:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka_broker
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,LISTENER_DOCKER_EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka_broker:29092,LISTENER_DOCKER_EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,LISTENER_DOCKER_EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongodb_init/wait-for-mongo-primary.sh:/usr/local/bin/wait-for-mongo-primary.sh:ro
+    command: bash /usr/local/bin/wait-for-mongo-primary.sh --logpath /dev/null --setParameter logLevel=5
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+
+  sensor-emulator-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: sensor-emulator-service
+    command: python sensor-emulator-service/main.py
+    depends_on:
+      - kafka_broker
+    env_file:
+      - .env
+    mem_limit: 512m
+
+  data-ingestion-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: data-ingestion-service
+    command: ["bash", "-c", "sleep 30 && python data-ingestion-service/main.py"]
+    depends_on:
+      - kafka_broker
+      - mongodb
+    env_file:
+      - .env
+    mem_limit: 512m
+
+  realtime-gateway-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: realtime-gateway-service
+    command: bash -c "sleep 15 && python realtime-gateway-service/main.py"
+    ports:
+      - "5050:5000"
+    depends_on:
+      - mongodb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 20
+    env_file:
+      - .env
+    mem_limit: 512m
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5050
+    container_name: dashboard
+    ports:
+      - "5051:80"
+    depends_on:
+      realtime-gateway-service:
+        condition: service_healthy
+    environment:
+      VITE_REFRESH_INTERVAL: 5000
+
+  batch-analytics-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    container_name: batch-analytics-service
+    volumes:
+      - ./batch-analytics-service:/app/spark
+      - spark_logs:/opt/bitnami/spark/logs
+    env_file:
+      - .env
+    depends_on:
+      - kafka_broker
+      - mongodb
+
+volumes:
+  mongodb_data:
+  spark_logs:
