@@ -19,6 +19,7 @@ function log(level: 'info' | 'warn' | 'error' | 'debug', ...args: any[]) {
 
 export const Dashboard: React.FC = () => {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData[]>([]);
+  const analyticsRef = React.useRef<AnalyticsData[]>([]);
   const [sensorData, setSensorData] = useState<SensorData[]>([]);
   const [rawSensorsCount, setRawSensorsCount] = useState<number | null>(null);
   const [analyticsCount, setAnalyticsCount] = useState<number | null>(null);
@@ -34,17 +35,19 @@ export const Dashboard: React.FC = () => {
           const existingIndex = prevData.findIndex(
             (item) => item.type === newAnalyticsData.type && item.zone === newAnalyticsData.zone
           );
+          let updatedData;
           if (existingIndex > -1) {
-            const updatedData = [...prevData];
+            updatedData = [...prevData];
             updatedData[existingIndex] = newAnalyticsData;
             setShowPopUp(`Analytics updated for ${newAnalyticsData.zone}!`);
             setTimeout(() => setShowPopUp(null), 3000);
-            return updatedData;
           } else {
+            updatedData = [...prevData, newAnalyticsData];
             setShowPopUp('New analytics data!');
             setTimeout(() => setShowPopUp(null), 3000);
-            return [...prevData, newAnalyticsData];
           }
+          analyticsRef.current = updatedData;
+          return updatedData;
         });
       },
       // onSensorUpdate
@@ -62,8 +65,17 @@ export const Dashboard: React.FC = () => {
       },
       // onInitialAnalytics
       (initialAnalytics: AnalyticsData[]) => {
-        setAnalyticsData(initialAnalytics);
         log('info', "Initial Analytics Data Loaded via WebSocket:", initialAnalytics);
+        
+        // Check if this is a refresh (we already had data)
+        if (analyticsRef.current.length > 0) {
+          setShowPopUp("Batch Analytics Refreshed!");
+          setTimeout(() => setShowPopUp(null), 4000);
+        }
+        
+        setAnalyticsData(initialAnalytics);
+        analyticsRef.current = initialAnalytics;
+        setLoading(false);
       },
       // onStatusCounts
       (counts: { raw_sensors_count: number; analytics_count: number }) => {
@@ -76,8 +88,6 @@ export const Dashboard: React.FC = () => {
         log('info', "Document with ID deleted:", id);
       }
     );
-
-    setLoading(false);
 
     return () => {
       apiService.disconnectSocket();
